@@ -1,3 +1,4 @@
+Markdown
 # Skola24 Schema – Home Assistant
 
 A custom Home Assistant integration for retrieving personal schedules from Skola24.
@@ -7,10 +8,12 @@ A custom Home Assistant integration for retrieving personal schedules from Skola
 - Select the Skola24 login domain during setup.
 - Log in with a Skola24 username and password.
 - Automatically discover students available under **Mina barn** when supported.
-- Use a student's **SchemaID** as the stable identifier for the personal schedule.
+- Use a student's **SchemaID** or personal **personGuid** as the stable identifier for the personal schedule.
 - Regenerate the Skola24 signature from SchemaID when fetching a schedule, avoiding stale cached selections.
+- Full support for personal timetables requiring `selectionType: 5`.
 - Show the current and upcoming school weeks in Home Assistant.
 - Cache previously fetched weeks to make week navigation significantly faster.
+- Graceful handling of empty or holiday weeks (e.g. week 44) without throwing parsing errors.
 - Configure the weekday/time used for the automatic week change.
 - Configure how many future weeks are retained.
 - Configure the schedule update interval.
@@ -50,102 +53,120 @@ config/
         ├── manifest.json
         ├── sensor.py
         └── sv.json
-```
+Restart Home Assistant and add Skola24 Schema from Settings → Devices & services → Add integration.
 
-Restart Home Assistant and add **Skola24 Schema** from **Settings → Devices & services → Add integration**.
-
-## Configuration
-
+Configuration
 During setup you select:
 
-- Skola24 domain
-- Student name
-- Entity ID
-- Username
-- Password
-- Optional SchemaID
+Skola24 domain
+
+Student name
+
+Entity ID
+
+Username
+
+Password
+
+Optional SchemaID / Personal GUID
 
 The integration includes the available Skola24 domains from the supplied Skola24 login-domain list.
 
 After login, the integration can discover students and their SchemaIDs. The SchemaID is then used to generate the signature required to retrieve the personal timetable.
 
-### SchemaID
-
+SchemaID & Personal GUID
 A SchemaID can be found in Skola24 under:
 
-**Mina inställningar → Mina uppgifter → Mina barn**
+Mina inställningar → Mina uppgifter → Mina barn
 
-If automatic discovery does not work, the SchemaID can be entered manually. If you only have one child and the integration discovers the student automatically, you may not need to enter the SchemaID manually.
+If automatic discovery does not work or if your municipality requires personal GUIDs (selectionType: 5), you can find it manually:
 
-## Options
+Log in to <school>.skola24.se.
 
+Press F12 to open Developer Tools and select the Network tab.
+
+Go to Schemavisare (Timetable Viewer).
+
+Look for requests to timetables or render keys.
+
+In the Response, look for the value personGuid (or copy the selection ID).
+
+Enter this value in the SchemaID field during configuration.
+
+Options
 The integration options allow you to configure:
 
-- Skola24 domain
-- Student
-- Entity ID
-- Day and time for automatic week changes
-- Number of future weeks
-- Update interval
+Skola24 domain
+
+Student
+
+Entity ID
+
+Day and time for automatic week changes
+
+Number of future weeks
+
+Update interval
 
 Previously fetched weeks are cached in memory to speed up navigation. A Home Assistant restart clears this cache.
 
-## Entity examples
-
+Entity examples
 A configured student may create entities such as:
 
-```text
+Plaintext
 sensor.skola24_elev
 button.skola24_elev_hamta_schema_nu
 button.skola24_elev_forra_veckan
 button.skola24_elev_nasta_veckan
-```
-
 The exact entity IDs depend on the Entity ID selected during configuration.
 
-## Security
-
+Security
 Credentials are stored in the Home Assistant config entry. Do not commit your Home Assistant configuration, credentials, or personal SchemaIDs to a public repository.
 
 The integration itself does not contain user credentials or personal student SchemaIDs.
 
-## Version history
+Version history
+Version 0.7.0
+Support for Personal GUIDs (selectionType: 5): Updated config_flow.py and api.py to handle direct personal GUID inputs and appropriate payload parameters (personalTimetable, privateSelectionMode, etc.).
 
-### Version 0.6.9
+Crash-Free Handling of Holidays and Empty Periods: Removed the strict check in render_week that previously threw parsing errors when a week lacked lessons. Weeks with zero lessons (such as holiday week 44) now cleanly return an empty list ([]) without cluttering the logs with error messages.
 
-- Added in-memory caching for previously fetched school weeks.
-- Improved week navigation by fetching only the selected week when it is not cached.
-- Preserved scheduled updates and existing sensor data.
+Improved Extraction Logic: Refined the recursive extract() method and normalization logic to effectively filter out numerical placeholder rows while successfully capturing all valid lessons.
 
-### Version 0.6.8
+Version 0.6.9
+Added in-memory caching for previously fetched school weeks.
 
-- Improved schedule retrieval and handling of weeks without lessons, such as school holidays.
-- Improved handling of invalid SchemaID errors.
+Improved week navigation by fetching only the selected week when it is not cached.
 
-### Version 0.6.4
+Preserved scheduled updates and existing sensor data.
 
-- Prepared the integration for public repository use.
-- Corrected the manifest version to `0.6.4`.
-- Removed an unnecessary hardcoded Eskilstuna host constant.
-- Removed the Eskilstuna-specific fallback used when generating the config-entry unique ID.
-- Updated documentation from the development-oriented 0.6.x README to generic Skola24 documentation.
+Version 0.6.8
+Improved schedule retrieval and handling of weeks without lessons, such as school holidays.
 
-## Example
+Improved handling of invalid SchemaID errors.
 
+Version 0.6.4
+Prepared the integration for public repository use.
+
+Corrected the manifest version to 0.6.4.
+
+Removed an unnecessary hardcoded Eskilstuna host constant.
+
+Removed the Eskilstuna-specific fallback used when generating the config-entry unique ID.
+
+Updated documentation from the development-oriented 0.6.x README to generic Skola24 documentation.
+
+Example
 Example of how a Skola24 schedule can be displayed in Home Assistant:
 
-![Skola24 Schema example](images/skola24-schema-example.png)
+Lovelace-exempel
+Nedan följer ett komplett exempel på ett Lovelace-kort som visar elevens schema, nästa lektion och knappar för att bläddra mellan veckor. Exemplet använder custom:button-card och card_mod, så dessa kort behöver vara installerade i Home Assistant.
 
-
-## Lovelace-exempel
-
-Nedan följer ett komplett exempel på ett Lovelace-kort som visar elevens schema, nästa lektion och knappar för att bläddra mellan veckor. Exemplet använder `custom:button-card` och `card_mod`, så dessa kort behöver vara installerade i Home Assistant.
-
-**Viktigt:** Byt ut `ELEV` i koden mot den del av entitetens ID som gäller för din elev. Om sensorn till exempel heter `sensor.skola24_ebba`, ska `sensor.skola24_ELEV` ändras till `sensor.skola24_ebba`. Gör motsvarande ändring för knapparna för förra och nästa vecka. Ändra även texten `ELEV` som visas som elevens namn i kortets rubrik till det namn du vill visa.
+Viktigt: Byt ut ELEV i koden mot den del av entitetens ID som gäller för din elev. Om sensorn till exempel heter sensor.skola24_ebba, ska sensor.skola24_ELEV ändras till sensor.skola24_ebba. Gör motsvarande ändring för knapparna för förra och nästa vecka. Ändra även texten ELEV som visas som elevens namn i kortets rubrik till det namn du vill visa.
 
 Lägg till koden som ett manuellt Lovelace-kort:
 
-```yaml
+YAML
 type: vertical-stack
 cards:
   - type: horizontal-stack
@@ -698,4 +719,3 @@ cards:
           gap: 8px;
         }
       }
-```
